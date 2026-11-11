@@ -3,10 +3,15 @@ import { WalletsController } from './wallets.controller.js';
 import { UserWalletsController } from './user-wallets.controller.js';
 import { WalletsService } from './wallets.service.js';
 import { UsersModule } from '../users/users.module.js';
+import { WalletsRepository } from './repositories/wallets.repository.js';
+import { InMemoryWalletsRepository } from './repositories/in-memory-wallets.repository.js';
 
 @Module({
   imports: [UsersModule],
   controllers: [WalletsController, UserWalletsController],
-  providers: [WalletsService],
+  providers: [
+    WalletsService,
+    { provide: WalletsRepository, useClass: InMemoryWalletsRepository },
+  ],
 })
 export class WalletsModule {}

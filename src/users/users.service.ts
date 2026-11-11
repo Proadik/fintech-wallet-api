@@ -1,30 +1,31 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { randomUUID } from 'node:crypto';
-import { DB } from '../db/db.js';
+import { UsersRepository } from './repositories/users.repository.js';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly db: DB) {}
+  constructor(private readonly users: UsersRepository) {}
 
   create(dto: CreateUserDto) {
-    const isTaken = this.db.getAll('users').some(user => user.email === dto.email)
+    const email = dto.email.trim().toLowerCase()
 
-    if (isTaken) {
+    if (this.users.findByEmail(email)) {
       throw new ConflictException('Email already taken')
     }
 
     const id = randomUUID()
 
-    return this.db.save('users', id, {
+    return this.users.save({
       ...dto,
+      email,
       id,
       createdAt: new Date().toISOString(),
     });
   }
 
   getAll () {
-    return this.db.getAll('users')
+    return this.users.findAll()
   }
 
   getOne (id: string) {
@@ -32,7 +33,7 @@ export class UsersService {
   }
 
   checkUserExistence (id: string) {
-    const user = this.db.getItem('users', id)
+    const user = this.users.findById(id)
 
     if (!user) {
       throw new NotFoundException('User not found')

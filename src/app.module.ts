@@ -4,11 +4,10 @@ import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { UsersModule } from './users/users.module.js';
 import { WalletsModule } from './wallets/wallets.module.js';
-import { DbModule } from './db/db.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 
 @Module({
-  imports: [UsersModule, WalletsModule, DbModule],
+  imports: [UsersModule, WalletsModule],
   controllers: [AppController],
   providers: [
     AppService,

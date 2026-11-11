@@ -23,7 +23,7 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+A small wallet API built with [NestJS](https://nestjs.com): create users, open currency wallets for them and read both back. Data lives in memory, so it is a prototype rather than a production service — see [In-memory storage limitations](#in-memory-storage-limitations).
 
 ## Project setup
 
@@ -41,21 +41,219 @@ $ npm run start
 $ npm run start:dev
 
 # production mode
+$ npm run build
 $ npm run start:prod
 ```
 
-## Run tests
+The server listens on `PORT` (read from `.env` by the `nest start` scripts), or on `3001` when it is not set. The examples below use `http://localhost:3001`.
+
+## Architecture
+
+```
+src/
+├── main.ts                     # bootstrap, reads PORT
+├── app.module.ts               # global ValidationPipe and exception filter
+├── common/filters/             # AllExceptionsFilter: one error format for every failure
+├── users/
+│   ├── users.controller.ts     # HTTP layer
+│   ├── users.service.ts        # business rules
+│   ├── dto/                    # request body validation
+│   ├── interfaces/             # User
+│   └── repositories/           # UsersRepository + in-memory implementation
+└── wallets/
+    ├── wallets.controller.ts
+    ├── user-wallets.controller.ts   # GET /users/:id/wallets
+    ├── wallets.service.ts
+    ├── dto/
+    ├── interfaces/             # Wallet
+    └── repositories/           # WalletsRepository + in-memory implementation
+```
+
+Each request goes through three layers:
+
+1. **Controller** — routing, status codes and parameter parsing. No business logic.
+2. **Service** — the rules: unique email, one wallet per currency per user, "not found" errors.
+3. **Repository** — storage. Services depend on the abstract classes `UsersRepository` and `WalletsRepository`, never on a concrete store.
+
+The abstract class doubles as the dependency-injection token, and each module binds it to an implementation:
+
+```ts
+{ provide: UsersRepository, useClass: InMemoryUsersRepository }
+```
+
+Swapping the storage means writing a new class that extends the repository and changing that one line; services and controllers stay as they are.
+
+`WalletsModule` imports `UsersModule` and uses `UsersService` to check that the wallet owner exists.
+
+## Endpoints
+
+| Method | Path                 | Description                  | Success | Errors             |
+| ------ | -------------------- | ---------------------------- | ------- | ------------------ |
+| `POST` | `/users`             | Create a user                | `201`   | `400`, `409`       |
+| `GET`  | `/users`             | List all users               | `200`   | —                  |
+| `GET`  | `/users/:id`         | Get one user                 | `200`   | `400`, `404`       |
+| `GET`  | `/users/:id/wallets` | List a user's wallets        | `200`   | `400`, `404`       |
+| `POST` | `/wallets`           | Open a wallet for a user     | `201`   | `400`, `404`, `409` |
+| `GET`  | `/wallets/:id`       | Get one wallet               | `200`   | `400`, `404`       |
+
+### Error format
+
+Every error, including validation failures and unknown routes, has the same shape:
+
+```json
+{
+  "statusCode": 409,
+  "error": "Conflict",
+  "message": "Email already taken",
+  "timestamp": "2026-11-11T13:10:02.011Z",
+  "path": "/users"
+}
+```
+
+`message` is always a string; several validation messages are joined with `, `.
+
+| Status | When                                                                              |
+| ------ | --------------------------------------------------------------------------------- |
+| `400`  | The body fails validation, or `:id` is not a UUID                                 |
+| `404`  | `User not found`, `Wallet not found`, or an unknown route                         |
+| `409`  | `Email already taken`, or `User already has a <currency> wallet`                  |
+| `500`  | Anything unexpected; the response says only `Internal server error`               |
+
+## Request examples
+
+### Create a user
 
 ```bash
-# unit tests
+curl -X POST http://localhost:3001/users \
+  -H "Content-Type: application/json" \
+  -d '{"email": "John@Example.com", "firstName": "John", "lastName": "Doe"}'
+```
+
+```json
+{
+  "email": "john@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "id": "74af4c3c-7d5d-435d-9757-309eed538494",
+  "createdAt": "2026-11-11T13:10:01.833Z"
+}
+```
+
+### List users and get one
+
+```bash
+curl http://localhost:3001/users
+curl http://localhost:3001/users/74af4c3c-7d5d-435d-9757-309eed538494
+```
+
+`GET /users` returns an array of users (`[]` when there are none); `GET /users/:id` returns a single user object.
+
+### Open a wallet
+
+```bash
+curl -X POST http://localhost:3001/wallets \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "74af4c3c-7d5d-435d-9757-309eed538494", "currency": "USD"}'
+```
+
+```json
+{
+  "userId": "74af4c3c-7d5d-435d-9757-309eed538494",
+  "currency": "USD",
+  "id": "a5f302c5-3bae-428e-a730-84969e52813a",
+  "balance": "0.00",
+  "createdAt": "2026-11-11T13:10:02.058Z"
+}
+```
+
+### Get a wallet and list a user's wallets
+
+```bash
+curl http://localhost:3001/wallets/a5f302c5-3bae-428e-a730-84969e52813a
+curl http://localhost:3001/users/74af4c3c-7d5d-435d-9757-309eed538494/wallets
+```
+
+### A failed request
+
+```bash
+curl -X POST http://localhost:3001/users \
+  -H "Content-Type: application/json" \
+  -d '{"email": "john@example.com", "firstName": "J", "lastName": "Doe", "role": "admin"}'
+```
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "property role should not exist, firstName must be longer than or equal to 2 characters",
+  "timestamp": "2026-11-11T13:10:01.996Z",
+  "path": "/users"
+}
+```
+
+## Validation rules
+
+Bodies are checked by a global `ValidationPipe` with `whitelist` and `forbidNonWhitelisted`, so a property that is not listed below is rejected with `400`.
+
+### `POST /users`
+
+| Field       | Rules                                                                    |
+| ----------- | ------------------------------------------------------------------------ |
+| `email`     | Required, a valid email. Stored in lower case.                           |
+| `firstName` | Required string, 2–50 characters after trimming surrounding whitespace.  |
+| `lastName`  | Required string, 2–50 characters after trimming surrounding whitespace.  |
+
+Emails are unique regardless of case: `John@x.com` and `john@x.com` are the same address, and the second registration gets `409`.
+
+### `POST /wallets`
+
+| Field      | Rules                                              |
+| ---------- | -------------------------------------------------- |
+| `userId`   | Required, a UUID of an existing user (else `404`). |
+| `currency` | Required, one of `USD`, `EUR`, `KZT`.              |
+
+A user can hold one wallet per currency; a second wallet in the same currency gets `409`. A new wallet always starts with `balance: "0.00"`. The balance is a decimal string, not a number, so it never loses precision.
+
+### Path parameters
+
+Every `:id` must be a UUID; anything else gets `400` with `Validation failed (uuid is expected)`.
+
+## Run tests
+
+Tests run on [Vitest](https://vitest.dev).
+
+```bash
+# unit tests (src/**/*.spec.ts)
 $ npm run test
 
-# e2e tests
+# unit tests in watch mode
+$ npm run test:watch
+
+# e2e tests (test/**/*.e2e-spec.ts)
 $ npm run test:e2e
 
 # test coverage
 $ npm run test:cov
 ```
+
+- **Unit tests** sit next to the code and cover the services' rules against the in-memory repositories.
+- **E2e tests** start the whole application and call it over HTTP with `supertest`. Each test gets a fresh app, so the storage starts empty every time.
+
+Neither suite needs a database or any other running service.
+
+## In-memory storage limitations
+
+Both repositories keep their data in a `Map` inside the Node.js process. That keeps the project dependency-free, with these consequences:
+
+- **Nothing is persisted.** A restart, a crash or a redeploy erases every user and wallet.
+- **One instance only.** Each process has its own data, so running several instances behind a load balancer gives inconsistent answers.
+- **No transactions or constraints.** Unique email and one-wallet-per-currency are checked in the service before saving, not enforced by the storage.
+- **Lookups scan everything.** Finding a user by email and listing a user's wallets go through all records; there are no indexes.
+- **No pagination.** `GET /users` returns every user in one response.
+- **Memory grows without bound.** Nothing is ever deleted — the API has no update or delete endpoints.
+- **Synchronous repository API.** The repository methods return values, not promises. Moving to a real database means making them, and the services that call them, asynchronous.
+
+To replace the storage, implement `UsersRepository` and `WalletsRepository` against a database and change the `useClass` binding in `UsersModule` and `WalletsModule`.
 
 ## Deployment
 
