@@ -5,9 +5,10 @@ import { AppService } from './app.service.js';
 import { UsersModule } from './users/users.module.js';
 import { WalletsModule } from './wallets/wallets.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { DatabaseModule } from './database/database.module.js';
 
 @Module({
-  imports: [UsersModule, WalletsModule],
+  imports: [UsersModule, WalletsModule, DatabaseModule],
   controllers: [AppController],
   providers: [
     AppService,

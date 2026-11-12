@@ -6,6 +6,7 @@ import { UsersRepository } from '../users/repositories/users.repository.js';
 import { InMemoryUsersRepository } from '../users/repositories/in-memory-users.repository.js';
 import { WalletsRepository } from './repositories/wallets.repository.js';
 import { InMemoryWalletsRepository } from './repositories/in-memory-wallets.repository.js';
+import { UniqueViolationError } from '../common/errors/unique-violation.error.js';
 
 describe('WalletsService', () => {
   let service: WalletsService;
@@ -127,5 +128,17 @@ describe('WalletsService', () => {
         new NotFoundException('User not found'),
       );
     });
+  });
+
+  // Two requests can both pass the "no such wallet yet" check; the storage then rejects the second
+  it('throws ConflictException when the storage reports a duplicate wallet', async () => {
+    const racing = new WalletsService({
+      findByUserId: async () => [],
+      create: async () => { throw new UniqueViolationError() },
+    } as unknown as WalletsRepository, usersService);
+
+    await expect(racing.create({ userId, currency: 'USD' })).rejects.toThrow(
+      new ConflictException('User already has a USD wallet'),
+    );
   });
 });

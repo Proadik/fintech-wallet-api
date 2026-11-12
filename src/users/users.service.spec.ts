@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service.js';
 import { UsersRepository } from './repositories/users.repository.js';
 import { InMemoryUsersRepository } from './repositories/in-memory-users.repository.js';
+import { UniqueViolationError } from '../common/errors/unique-violation.error.js';
 
 const dto = {
   email: 'john@example.com',
@@ -119,17 +120,15 @@ describe('UsersService', () => {
     });
   });
 
-  describe('checkUserExistence', () => {
-    it('returns the user when it exists', async () => {
-      const user = await service.create(dto);
+  // Two requests can both pass the "email is free" check; the storage then rejects the second
+  it('throws ConflictException when the storage reports a duplicate email', async () => {
+    const racing = new UsersService({
+      findByEmail: async () => undefined,
+      create: async () => { throw new UniqueViolationError() },
+    } as unknown as UsersRepository);
 
-      expect(await service.checkUserExistence(user.id)).toEqual(user);
-    });
-
-    it('throws NotFoundException when the user does not exist', async () => {
-      await expect(service.checkUserExistence('missing')).rejects.toThrow(
-        new NotFoundException('User not found'),
-      );
-    });
+    await expect(racing.create(dto)).rejects.toThrow(
+      new ConflictException('Email already taken'),
+    );
   });
 });

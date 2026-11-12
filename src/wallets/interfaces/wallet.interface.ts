@@ -5,3 +5,7 @@ export interface Wallet {
   balance: string;
   createdAt: string;
 }
+
+// What the application supplies; the storage generates id and createdAt
+// and opens the wallet with a zero balance
+export type NewWallet = Pick<Wallet, 'userId' | 'currency'>

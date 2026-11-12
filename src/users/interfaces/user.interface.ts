@@ -5,3 +5,6 @@ export interface User {
   lastName: string;
   createdAt: string;
 }
+
+// What the application supplies; the storage generates id and createdAt
+export type NewUser = Omit<User, 'id' | 'createdAt'>

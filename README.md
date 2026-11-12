@@ -23,12 +23,23 @@
 
 ## Description
 
-A small wallet API built with [NestJS](https://nestjs.com): create users, open currency wallets for them and read both back. Data lives in memory, so it is a prototype rather than a production service — see [In-memory storage limitations](#in-memory-storage-limitations).
+A small wallet API built with [NestJS](https://nestjs.com): create users, open currency wallets for them and read both back. Data is stored in PostgreSQL through [Drizzle ORM](https://orm.drizzle.team) — see [Storage](#storage).
 
 ## Project setup
 
 ```bash
 $ npm install
+$ cp .env.example .env
+```
+
+Set `DATABASE_URL` in `.env` to a PostgreSQL database, then create the tables:
+
+```bash
+# write SQL migrations into ./drizzle from the schema in src/database/schema
+$ npm run db:generate
+
+# apply them to the database in DATABASE_URL
+$ npm run db:migrate
 ```
 
 ## Compile and run the project
@@ -45,7 +56,7 @@ $ npm run build
 $ npm run start:prod
 ```
 
-The server listens on `PORT` (read from `.env` by the `nest start` scripts), or on `3001` when it is not set. The examples below use `http://localhost:3001`.
+The `start`, `start:dev` and `start:debug` scripts load `.env` through `nest start --env-file .env`. `start:prod` runs plain `node`, so `PORT` and `DATABASE_URL` must already be in the environment. The server listens on `PORT`, or on `3001` when it is not set. The examples below use `http://localhost:3001`.
 
 ## Architecture
 
@@ -54,19 +65,22 @@ src/
 ├── main.ts                     # bootstrap, reads PORT
 ├── app.module.ts               # global ValidationPipe and exception filter
 ├── common/filters/             # AllExceptionsFilter: one error format for every failure
+├── database/
+│   ├── database.module.ts      # Drizzle connection, reads DATABASE_URL
+│   └── schema/                 # users and wallets tables
 ├── users/
 │   ├── users.controller.ts     # HTTP layer
 │   ├── users.service.ts        # business rules
 │   ├── dto/                    # request body validation
 │   ├── interfaces/             # User
-│   └── repositories/           # UsersRepository + in-memory implementation
+│   └── repositories/           # UsersRepository + Drizzle and in-memory implementations
 └── wallets/
     ├── wallets.controller.ts
     ├── user-wallets.controller.ts   # GET /users/:id/wallets
     ├── wallets.service.ts
     ├── dto/
     ├── interfaces/             # Wallet
-    └── repositories/           # WalletsRepository + in-memory implementation
+    └── repositories/           # WalletsRepository + Drizzle and in-memory implementations
 ```
 
 Each request goes through three layers:
@@ -78,7 +92,7 @@ Each request goes through three layers:
 The abstract class doubles as the dependency-injection token, and each module binds it to an implementation:
 
 ```ts
-{ provide: UsersRepository, useClass: InMemoryUsersRepository }
+{ provide: UsersRepository, useClass: DrizzleUsersRepository }
 ```
 
 Swapping the storage means writing a new class that extends the repository and changing that one line; services and controllers stay as they are.
@@ -232,27 +246,41 @@ $ npm run test:watch
 # e2e tests (test/**/*.e2e-spec.ts)
 $ npm run test:e2e
 
+# tests against a real PostgreSQL (test/**/*.db-spec.ts)
+$ npm run test:db
+
 # test coverage
 $ npm run test:cov
 ```
 
 - **Unit tests** sit next to the code and cover the services' rules against the in-memory repositories.
-- **E2e tests** start the whole application and call it over HTTP with `supertest`. Each test gets a fresh app, so the storage starts empty every time.
+- **E2e tests** start the whole application and call it over HTTP with `supertest`. `test/create-app.ts` drops the database module and swaps in the in-memory repositories; each test gets a fresh app, so the storage starts empty every time.
 
-Neither suite needs a database or any other running service.
+- **Database tests** start the application on a real PostgreSQL with the Drizzle repositories. They cover what the other suites cannot: 50 simultaneous `POST /wallets` for one user and currency must create exactly one wallet and answer `409` to the other 49.
 
-## In-memory storage limitations
+The unit and e2e suites need no database. `npm run test:db` connects to `TEST_DATABASE_URL`, or to `DATABASE_URL` from `.env` when that is not set, and expects the migrations to be applied. Each test creates its own user and deletes it, with its wallets, afterwards.
 
-Both repositories keep their data in a `Map` inside the Node.js process. That keeps the project dependency-free, with these consequences:
+## Storage
 
-- **Nothing is persisted.** A restart, a crash or a redeploy erases every user and wallet.
-- **One instance only.** Each process has its own data, so running several instances behind a load balancer gives inconsistent answers.
-- **No transactions or constraints.** Unique email and one-wallet-per-currency are checked in the service before saving, not enforced by the storage.
-- **Lookups scan everything.** Finding a user by email and listing a user's wallets go through all records; there are no indexes.
+The application stores data in PostgreSQL. `DatabaseModule` registers the connection with `@nestjs/drizzle` from `DATABASE_URL`, and `DrizzleUsersRepository` and `DrizzleWalletsRepository` implement the repository contracts on top of it.
+
+| Table     | Columns                                                  | Constraints                                         |
+| --------- | -------------------------------------------------------- | --------------------------------------------------- |
+| `users`   | `id`, `email`, `first_name`, `last_name`, `created_at`   | `email` is unique                                   |
+| `wallets` | `id`, `user_id`, `currency`, `balance_minor`, `created_at` | `user_id` references `users`; `(user_id, currency)` is unique; `balance_minor >= 0`; `currency` is one of `USD`, `EUR`, `KZT` |
+
+`balance_minor` is a `bigint` holding the balance in minor units (cents, tiyn). The API still returns it as a decimal string: `12345` is sent as `"123.45"`.
+
+The services check for a duplicate before inserting, but two simultaneous requests can both pass that check. The unique constraints then reject the second insert, and the service answers `409` exactly as it does for an ordinary duplicate.
+
+Known limitations:
+
 - **No pagination.** `GET /users` returns every user in one response.
-- **Memory grows without bound.** Nothing is ever deleted — the API has no update or delete endpoints.
+- **No update or delete endpoints.**
 
-The repository methods are already asynchronous, so services and controllers do not change when the storage does. To replace it, implement `UsersRepository` and `WalletsRepository` against a database and change the `useClass` binding in `UsersModule` and `WalletsModule`.
+### In-memory repositories
+
+`InMemoryUsersRepository` and `InMemoryWalletsRepository` keep data in a `Map` inside the process. They are used by the tests only: nothing is persisted, each process has its own data, and uniqueness is enforced by the services alone.
 
 ## Deployment
 

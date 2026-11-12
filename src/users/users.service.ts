@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto.js';
-import { randomUUID } from 'node:crypto';
+import { UniqueViolationError } from '../common/errors/unique-violation.error.js';
 import { UsersRepository } from './repositories/users.repository.js';
 
 @Injectable()
@@ -10,29 +10,33 @@ export class UsersService {
   async create(dto: CreateUserDto) {
     const email = dto.email.trim().toLowerCase()
 
+    const conflict = new ConflictException('Email already taken')
+
     if (await this.users.findByEmail(email)) {
-      throw new ConflictException('Email already taken')
+      throw conflict
     }
 
-    const id = randomUUID()
+    try {
+      return await this.users.create({
+        email,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+      });
+    } catch (error) {
+      // A concurrent request registered the same email after the check above
+      if (error instanceof UniqueViolationError) {
+        throw conflict
+      }
 
-    return this.users.save({
-      ...dto,
-      email,
-      id,
-      createdAt: new Date().toISOString(),
-    });
+      throw error
+    }
   }
 
   getAll () {
     return this.users.findAll()
   }
 
-  getOne (id: string) {
-    return this.checkUserExistence(id)
-  }
-
-  async checkUserExistence (id: string) {
+  async getOne (id: string) {
     const user = await this.users.findById(id)
 
     if (!user) {
