@@ -11,10 +11,10 @@ export class WalletsService {
     private readonly usersService: UsersService,
   ) {}
 
-  create(dto: CreateWalletDto) {
-    this.usersService.checkUserExistence(dto.userId);
+  async create(dto: CreateWalletDto) {
+    await this.usersService.checkUserExistence(dto.userId);
 
-    const userWallets = this.wallets.findByUserId(dto.userId)
+    const userWallets = await this.wallets.findByUserId(dto.userId)
 
     if (userWallets.some((w => w.currency === dto.currency))) {
       throw new ConflictException(`User already has a ${dto.currency} wallet`)
@@ -30,8 +30,8 @@ export class WalletsService {
     });
   }
 
-  getOne(id: string) {
-    const wallet = this.wallets.findById(id);
+  async getOne(id: string) {
+    const wallet = await this.wallets.findById(id);
 
     if (!wallet) {
       throw new NotFoundException('Wallet not found');
@@ -40,8 +40,8 @@ export class WalletsService {
     return wallet;
   }
 
-  getUserWallets (id: string) {
-    this.usersService.checkUserExistence(id)
+  async getUserWallets (id: string) {
+    await this.usersService.checkUserExistence(id)
 
     return this.wallets.findByUserId(id)
   };

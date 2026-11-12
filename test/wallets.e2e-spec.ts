@@ -62,7 +62,9 @@ describe('Wallets (e2e)', () => {
   });
 
   it.each(['BTC', 'usd'])('rejects currency %s → 400', async (currency) => {
-    await createWallet({ userId, currency }).expect(400);
+    const res = await createWallet({ userId, currency }).expect(400);
+
+    expect(res.body.message).toBe('currency must be one of the following values: USD, EUR, KZT');
   });
 
   it('rejects balance in the request → 400', async () => {

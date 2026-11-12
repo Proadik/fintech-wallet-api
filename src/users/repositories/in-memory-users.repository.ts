@@ -6,20 +6,20 @@ import { UsersRepository } from './users.repository.js';
 export class InMemoryUsersRepository extends UsersRepository {
   private readonly users = new Map<string, User>()
 
-  save (user: User) {
+  async save (user: User) {
     this.users.set(user.id, user)
     return user
   }
 
-  findById (id: string) {
+  async findById (id: string) {
     return this.users.get(id)
   }
 
-  findByEmail (email: string) {
-    return this.findAll().find(user => user.email === email)
+  async findByEmail (email: string) {
+    return Array.from(this.users.values()).find(user => user.email === email)
   }
 
-  findAll () {
+  async findAll () {
     return Array.from(this.users.values())
   }
 }

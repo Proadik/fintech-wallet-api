@@ -66,6 +66,12 @@ describe('Users (e2e)', () => {
     expect(res.body.message).toBe('Email already taken');
   });
 
+  it.each(['email', 'firstName', 'lastName'])('rejects a non-string %s → 400', async (field) => {
+    const res = await createUser({ ...validUser, [field]: 123 }).expect(400);
+
+    expect(res.body.message).toContain(field);
+  });
+
   it('rejects unknown fields → 400', async () => {
     const res = await createUser({ ...validUser, id: MISSING_ID, role: 'admin' }).expect(400);
 

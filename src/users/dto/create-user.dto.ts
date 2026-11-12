@@ -10,20 +10,20 @@ import { Transform } from 'class-transformer';
 export class CreateUserDto {
   @IsEmail()
   @IsNotEmpty()
-  @Transform(({ value }) => value.toLowerCase())
+  @Transform(({ value }) => typeof value === 'string' ? value.toLowerCase() : value)
   email: string;
 
   @IsString()
   @IsNotEmpty()
   @MinLength(2)
   @MaxLength(50)
-  @Transform(({ value }) => value.trim())
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   firstName: string;
 
   @IsString()
   @IsNotEmpty()
   @MinLength(2)
   @MaxLength(50)
-  @Transform(({ value }) => value.trim())
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
   lastName: string;
 }

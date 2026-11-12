@@ -1,5 +1,5 @@
 import {
-  IsEnum,
+  IsIn,
   IsNotEmpty,
   IsString,
   IsUUID,
@@ -11,6 +11,6 @@ export class CreateWalletDto {
   @IsUUID()
   userId: string;
   @IsNotEmpty()
-  @IsEnum(['USD', 'EUR', 'KZT'])
+  @IsIn(['USD', 'EUR', 'KZT'])
   currency: string;
 }

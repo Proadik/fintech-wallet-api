@@ -251,9 +251,8 @@ Both repositories keep their data in a `Map` inside the Node.js process. That ke
 - **Lookups scan everything.** Finding a user by email and listing a user's wallets go through all records; there are no indexes.
 - **No pagination.** `GET /users` returns every user in one response.
 - **Memory grows without bound.** Nothing is ever deleted — the API has no update or delete endpoints.
-- **Synchronous repository API.** The repository methods return values, not promises. Moving to a real database means making them, and the services that call them, asynchronous.
 
-To replace the storage, implement `UsersRepository` and `WalletsRepository` against a database and change the `useClass` binding in `UsersModule` and `WalletsModule`.
+The repository methods are already asynchronous, so services and controllers do not change when the storage does. To replace it, implement `UsersRepository` and `WalletsRepository` against a database and change the `useClass` binding in `UsersModule` and `WalletsModule`.
 
 ## Deployment
 

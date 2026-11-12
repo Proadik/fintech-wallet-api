@@ -7,10 +7,10 @@ import { UsersRepository } from './repositories/users.repository.js';
 export class UsersService {
   constructor(private readonly users: UsersRepository) {}
 
-  create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto) {
     const email = dto.email.trim().toLowerCase()
 
-    if (this.users.findByEmail(email)) {
+    if (await this.users.findByEmail(email)) {
       throw new ConflictException('Email already taken')
     }
 
@@ -32,8 +32,8 @@ export class UsersService {
     return this.checkUserExistence(id)
   }
 
-  checkUserExistence (id: string) {
-    const user = this.users.findById(id)
+  async checkUserExistence (id: string) {
+    const user = await this.users.findById(id)
 
     if (!user) {
       throw new NotFoundException('User not found')
