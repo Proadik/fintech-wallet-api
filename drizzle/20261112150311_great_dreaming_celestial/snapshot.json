@@ -1,0 +1,479 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "8bde8150-3b56-48d6-a243-94347288c50d",
+  "prevIds": [
+    "9eae15df-b4a0-48b2-bee5-545b15f65d87"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "transfers"
+      ],
+      "writes": [
+        "s|tbl|public.transfers",
+        "n|tbl|public.transfers",
+        "e|tbl|public.transfers",
+        "n|rel|public.transfers",
+        "n|type|public.transfers",
+        "n|rel|public.transfers_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "ledger_entries"
+      ],
+      "writes": [
+        "s|tbl|public.ledger_entries",
+        "n|tbl|public.ledger_entries",
+        "e|tbl|public.ledger_entries",
+        "n|rel|public.ledger_entries",
+        "n|type|public.ledger_entries",
+        "n|rel|public.ledger_entries_pkey"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "transfers"
+      ],
+      "writes": [
+        "s|fk|public.transfers.transfers_from_wallet_id_wallets_id_fkey",
+        "n|fk|public.transfers.transfers_from_wallet_id_wallets_id_fkey",
+        "e|fk|public.transfers.transfers_from_wallet_id_wallets_id_fkey",
+        "n|con|public.transfers.transfers_from_wallet_id_wallets_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.transfers",
+        "n|sch|public",
+        "n|tbl|public.wallets",
+        "n|sch|public",
+        "n|col|public.transfers.from_wallet_id",
+        "n|col|public.wallets.id",
+        "e|uniqueness|public.wallets.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "transfers"
+      ],
+      "writes": [
+        "s|fk|public.transfers.transfers_to_wallet_id_wallets_id_fkey",
+        "n|fk|public.transfers.transfers_to_wallet_id_wallets_id_fkey",
+        "e|fk|public.transfers.transfers_to_wallet_id_wallets_id_fkey",
+        "n|con|public.transfers.transfers_to_wallet_id_wallets_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.transfers",
+        "n|sch|public",
+        "n|tbl|public.wallets",
+        "n|sch|public",
+        "n|col|public.transfers.to_wallet_id",
+        "n|col|public.wallets.id",
+        "e|uniqueness|public.wallets.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "ledger_entries"
+      ],
+      "writes": [
+        "s|fk|public.ledger_entries.ledger_entries_transfer_id_transfers_id_fkey",
+        "n|fk|public.ledger_entries.ledger_entries_transfer_id_transfers_id_fkey",
+        "e|fk|public.ledger_entries.ledger_entries_transfer_id_transfers_id_fkey",
+        "n|con|public.ledger_entries.ledger_entries_transfer_id_transfers_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.ledger_entries",
+        "n|sch|public",
+        "n|tbl|public.transfers",
+        "n|sch|public",
+        "n|col|public.ledger_entries.transfer_id",
+        "n|col|public.transfers.id",
+        "e|uniqueness|public.transfers.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "ledger_entries"
+      ],
+      "writes": [
+        "s|fk|public.ledger_entries.ledger_entries_wallet_id_wallets_id_fkey",
+        "n|fk|public.ledger_entries.ledger_entries_wallet_id_wallets_id_fkey",
+        "e|fk|public.ledger_entries.ledger_entries_wallet_id_wallets_id_fkey",
+        "n|con|public.ledger_entries.ledger_entries_wallet_id_wallets_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.ledger_entries",
+        "n|sch|public",
+        "n|tbl|public.wallets",
+        "n|sch|public",
+        "n|col|public.ledger_entries.wallet_id",
+        "n|col|public.wallets.id",
+        "e|uniqueness|public.wallets.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "transfers",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "ledger_entries",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "from_wallet_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "to_wallet_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "amount_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "currency",
+        "type": "varchar(3)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "status",
+        "type": "varchar",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'completed'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "transfer_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "wallet_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "amount",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "transfers_from_wallet_id_wallets_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "from_wallet_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "wallets",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "NO ACTION",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "transfers_to_wallet_id_wallets_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "to_wallet_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "wallets",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "NO ACTION",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "ledger_entries_transfer_id_transfers_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "transfer_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "transfers",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "NO ACTION",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "ledger_entries_wallet_id_wallets_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "wallet_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "wallets",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "NO ACTION",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "transfers_pkey",
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "ledger_entries_pkey",
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "transfers_amount_minor_more_than_zero",
+        "value": "\"amount_minor\" > 0",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfers",
+        "name": "transfers_distinct_wallets",
+        "value": "\"from_wallet_id\" <> \"to_wallet_id\"",
+        "entityType": "checks"
+      }
+    }
+  ]
+}

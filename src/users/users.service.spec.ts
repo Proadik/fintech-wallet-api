@@ -1,9 +1,8 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service.js';
 import { UsersRepository } from './repositories/users.repository.js';
-import { InMemoryUsersRepository } from './repositories/in-memory-users.repository.js';
 import { UniqueViolationError } from '../common/errors/unique-violation.error.js';
+import { User } from './interfaces/user.interface.js';
 
 const dto = {
   email: 'john@example.com',
@@ -11,124 +10,96 @@ const dto = {
   lastName: 'Doe',
 };
 
+const user: User = {
+  ...dto,
+  id: '11111111-1111-4111-8111-111111111111',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
 describe('UsersService', () => {
+  const repository = {
+    create: vi.fn(),
+    findById: vi.fn(),
+    findByEmail: vi.fn(),
+    findAll: vi.fn(),
+  };
+
   let service: UsersService;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        UsersService,
-        { provide: UsersRepository, useClass: InMemoryUsersRepository },
-      ],
-    }).compile();
-
-    service = module.get<UsersService>(UsersService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  beforeEach(() => {
+    vi.resetAllMocks();
+    repository.create.mockResolvedValue(user);
+    service = new UsersService(repository as unknown as UsersRepository);
   });
 
   describe('create', () => {
-    it('returns the user with a generated id and createdAt', async () => {
-      const user = await service.create(dto);
+    it('stores the user and returns what the repository created', async () => {
+      await expect(service.create(dto)).resolves.toEqual(user);
 
-      expect(user).toEqual({
-        ...dto,
-        id: expect.any(String),
-        createdAt: expect.any(String),
-      });
-      expect(new Date(user.createdAt).toISOString()).toBe(user.createdAt);
+      expect(repository.create).toHaveBeenCalledWith(dto);
     });
 
-    it('stores the user so it can be read back', async () => {
-      const user = await service.create(dto);
+    it('stores the email in lower case', async () => {
+      await service.create({ ...dto, email: 'John@Example.COM' });
 
-      expect(await service.getOne(user.id)).toEqual(user);
+      expect(repository.findByEmail).toHaveBeenCalledWith('john@example.com');
+      expect(repository.create).toHaveBeenCalledWith(dto);
     });
 
-    it('gives every user a unique id', async () => {
-      const first = await service.create(dto);
-      const second = await service.create({ ...dto, email: 'jane@example.com' });
+    it('trims whitespace around the email', async () => {
+      await service.create({ ...dto, email: '  John@Example.com \n' });
 
-      expect(first.id).not.toBe(second.id);
+      expect(repository.findByEmail).toHaveBeenCalledWith('john@example.com');
+      expect(repository.create).toHaveBeenCalledWith(dto);
     });
 
     it('throws ConflictException when the email is already taken', async () => {
-      await service.create(dto);
+      repository.findByEmail.mockResolvedValue(user);
 
       await expect(service.create({ ...dto, firstName: 'Other' })).rejects.toThrow(
         new ConflictException('Email already taken'),
       );
-      expect(await service.getAll()).toHaveLength(1);
+      expect(repository.create).not.toHaveBeenCalled();
     });
 
-    it('stores the email in lower case', async () => {
-      const user = await service.create({ ...dto, email: 'John@Example.COM' });
+    // Two requests can both pass the "email is free" check; the storage then rejects the second
+    it('throws ConflictException when the storage reports a duplicate email', async () => {
+      repository.create.mockRejectedValue(new UniqueViolationError());
 
-      expect(user.email).toBe('john@example.com');
-      expect((await service.getOne(user.id)).email).toBe('john@example.com');
+      await expect(service.create(dto)).rejects.toThrow(
+        new ConflictException('Email already taken'),
+      );
     });
 
-    it('trims whitespace around the email', async () => {
-      const user = await service.create({ ...dto, email: '  John@x.com \n' });
+    it('passes other storage errors through', async () => {
+      repository.create.mockRejectedValue(new Error('connection lost'));
 
-      expect(user.email).toBe('john@x.com');
-      await expect(service.create({ ...dto, email: ' john@x.com' })).rejects.toThrow(
-        new ConflictException('Email already taken'),
-      );
-      expect(await service.getAll()).toHaveLength(1);
-    });
-
-    it('treats emails that differ only by case as the same email', async () => {
-      await service.create({ ...dto, email: 'John@x.com' });
-
-      await expect(service.create({ ...dto, email: 'john@x.com' })).rejects.toThrow(
-        new ConflictException('Email already taken'),
-      );
-      await expect(service.create({ ...dto, email: 'JOHN@X.COM' })).rejects.toThrow(
-        new ConflictException('Email already taken'),
-      );
-      expect(await service.getAll()).toHaveLength(1);
+      await expect(service.create(dto)).rejects.toThrow('connection lost');
     });
   });
 
   describe('getAll', () => {
-    it('returns an empty array when there are no users', async () => {
-      expect(await service.getAll()).toEqual([]);
-    });
+    it('returns the users from the repository', async () => {
+      repository.findAll.mockResolvedValue([user]);
 
-    it('returns every created user', async () => {
-      const first = await service.create(dto);
-      const second = await service.create({ ...dto, email: 'jane@example.com' });
-
-      expect(await service.getAll()).toEqual([first, second]);
+      await expect(service.getAll()).resolves.toEqual([user]);
     });
   });
 
   describe('getOne', () => {
     it('returns the user by id', async () => {
-      const user = await service.create(dto);
+      repository.findById.mockResolvedValue(user);
 
-      expect(await service.getOne(user.id)).toEqual(user);
+      await expect(service.getOne(user.id)).resolves.toEqual(user);
+      expect(repository.findById).toHaveBeenCalledWith(user.id);
     });
 
     it('throws NotFoundException for an unknown id', async () => {
+      repository.findById.mockResolvedValue(undefined);
+
       await expect(service.getOne('missing')).rejects.toThrow(
         new NotFoundException('User not found'),
       );
     });
-  });
-
-  // Two requests can both pass the "email is free" check; the storage then rejects the second
-  it('throws ConflictException when the storage reports a duplicate email', async () => {
-    const racing = new UsersService({
-      findByEmail: async () => undefined,
-      create: async () => { throw new UniqueViolationError() },
-    } as unknown as UsersRepository);
-
-    await expect(racing.create(dto)).rejects.toThrow(
-      new ConflictException('Email already taken'),
-    );
   });
 });

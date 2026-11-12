@@ -1,104 +1,102 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
 import { WalletsService } from './wallets.service.js';
 import { UsersService } from '../users/users.service.js';
-import { UsersRepository } from '../users/repositories/users.repository.js';
-import { InMemoryUsersRepository } from '../users/repositories/in-memory-users.repository.js';
 import { WalletsRepository } from './repositories/wallets.repository.js';
-import { InMemoryWalletsRepository } from './repositories/in-memory-wallets.repository.js';
 import { UniqueViolationError } from '../common/errors/unique-violation.error.js';
+import { Wallet } from './interfaces/wallet.interface.js';
+
+const userId = '11111111-1111-4111-8111-111111111111';
+
+const usdWallet: Wallet = {
+  id: '22222222-2222-4222-8222-222222222222',
+  userId,
+  currency: 'USD',
+  balance: '0.00',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
 
 describe('WalletsService', () => {
+  const repository = {
+    create: vi.fn(),
+    findById: vi.fn(),
+    findByUserId: vi.fn(),
+  };
+
+  const usersService = { getOne: vi.fn() };
+
   let service: WalletsService;
-  let usersService: UsersService;
-  let userId: string;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        WalletsService,
-        UsersService,
-        { provide: UsersRepository, useClass: InMemoryUsersRepository },
-        { provide: WalletsRepository, useClass: InMemoryWalletsRepository },
-      ],
-    }).compile();
+  beforeEach(() => {
+    vi.resetAllMocks();
+    repository.findByUserId.mockResolvedValue([]);
+    repository.create.mockResolvedValue(usdWallet);
 
-    service = module.get<WalletsService>(WalletsService);
-    usersService = module.get<UsersService>(UsersService);
-
-    userId = (await usersService.create({
-      email: 'john@example.com',
-      firstName: 'John',
-      lastName: 'Doe',
-    })).id;
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+    service = new WalletsService(
+      repository as unknown as WalletsRepository,
+      usersService as unknown as UsersService,
+    );
   });
 
   describe('create', () => {
-    it('returns the wallet with a generated id, zero balance and createdAt', async () => {
-      const wallet = await service.create({ userId, currency: 'USD' });
+    it('creates the wallet and returns what the repository created', async () => {
+      await expect(service.create({ userId, currency: 'USD' })).resolves.toEqual(usdWallet);
 
-      expect(wallet).toEqual({
-        id: expect.any(String),
-        userId,
-        currency: 'USD',
-        balance: '0.00',
-        createdAt: expect.any(String),
-      });
-      expect(new Date(wallet.createdAt).toISOString()).toBe(wallet.createdAt);
-    });
-
-    it('stores the wallet so it can be read back', async () => {
-      const wallet = await service.create({ userId, currency: 'USD' });
-
-      expect(await service.getOne(wallet.id)).toEqual(wallet);
+      expect(repository.create).toHaveBeenCalledWith({ userId, currency: 'USD' });
     });
 
     it('throws NotFoundException when the user does not exist', async () => {
-      await expect(service.create({ userId: 'missing', currency: 'USD' })).rejects.toThrow(new NotFoundException('User not found'));
+      usersService.getOne.mockRejectedValue(new NotFoundException('User not found'));
+
+      await expect(service.create({ userId: 'missing', currency: 'USD' })).rejects.toThrow(
+        new NotFoundException('User not found'),
+      );
+      expect(repository.create).not.toHaveBeenCalled();
     });
 
     it('throws ConflictException when the user already has a wallet in that currency', async () => {
-      await service.create({ userId, currency: 'USD' });
+      repository.findByUserId.mockResolvedValue([usdWallet]);
 
       await expect(service.create({ userId, currency: 'USD' })).rejects.toThrow(
         new ConflictException('User already has a USD wallet'),
       );
-      expect(await service.getUserWallets(userId)).toHaveLength(1);
+      expect(repository.create).not.toHaveBeenCalled();
     });
 
     it('allows one user to have wallets in different currencies', async () => {
-      const usd = await service.create({ userId, currency: 'USD' });
-      const eur = await service.create({ userId, currency: 'EUR' });
+      repository.findByUserId.mockResolvedValue([usdWallet]);
 
-      expect(usd.id).not.toBe(eur.id);
-      expect(await service.getUserWallets(userId)).toEqual([usd, eur]);
+      await service.create({ userId, currency: 'EUR' });
+
+      expect(repository.create).toHaveBeenCalledWith({ userId, currency: 'EUR' });
     });
 
-    it('allows different users to have wallets in the same currency', async () => {
-      const otherUserId = (await usersService.create({
-        email: 'jane@example.com',
-        firstName: 'Jane',
-        lastName: 'Doe',
-      })).id;
+    // Two requests can both pass the "no such wallet yet" check; the storage then rejects the second
+    it('throws ConflictException when the storage reports a duplicate wallet', async () => {
+      repository.create.mockRejectedValue(new UniqueViolationError());
 
-      await service.create({ userId, currency: 'USD' });
+      await expect(service.create({ userId, currency: 'USD' })).rejects.toThrow(
+        new ConflictException('User already has a USD wallet'),
+      );
+    });
 
-      await expect(service.create({ userId: otherUserId, currency: 'USD' })).resolves.toBeDefined();
+    it('passes other storage errors through', async () => {
+      repository.create.mockRejectedValue(new Error('connection lost'));
+
+      await expect(service.create({ userId, currency: 'USD' })).rejects.toThrow('connection lost');
     });
   });
 
   describe('getOne', () => {
     it('returns the wallet by id', async () => {
-      const wallet = await service.create({ userId, currency: 'KZT' });
+      repository.findById.mockResolvedValue(usdWallet);
 
-      expect(await service.getOne(wallet.id)).toEqual(wallet);
+      await expect(service.getOne(usdWallet.id)).resolves.toEqual(usdWallet);
+      expect(repository.findById).toHaveBeenCalledWith(usdWallet.id);
     });
 
     it('throws NotFoundException for an unknown id', async () => {
+      repository.findById.mockResolvedValue(undefined);
+
       await expect(service.getOne('missing')).rejects.toThrow(
         new NotFoundException('Wallet not found'),
       );
@@ -106,39 +104,20 @@ describe('WalletsService', () => {
   });
 
   describe('getUserWallets', () => {
-    it('returns an empty array when the user has no wallets', async () => {
-      expect(await service.getUserWallets(userId)).toEqual([]);
-    });
+    it('returns the wallets of the user', async () => {
+      repository.findByUserId.mockResolvedValue([usdWallet]);
 
-    it('returns only the wallets that belong to the user', async () => {
-      const otherUserId = (await usersService.create({
-        email: 'jane@example.com',
-        firstName: 'Jane',
-        lastName: 'Doe',
-      })).id;
-
-      const mine = await service.create({ userId, currency: 'USD' });
-      await service.create({ userId: otherUserId, currency: 'USD' });
-
-      expect(await service.getUserWallets(userId)).toEqual([mine]);
+      await expect(service.getUserWallets(userId)).resolves.toEqual([usdWallet]);
+      expect(repository.findByUserId).toHaveBeenCalledWith(userId);
     });
 
     it('throws NotFoundException when the user does not exist', async () => {
+      usersService.getOne.mockRejectedValue(new NotFoundException('User not found'));
+
       await expect(service.getUserWallets('missing')).rejects.toThrow(
         new NotFoundException('User not found'),
       );
+      expect(repository.findByUserId).not.toHaveBeenCalled();
     });
-  });
-
-  // Two requests can both pass the "no such wallet yet" check; the storage then rejects the second
-  it('throws ConflictException when the storage reports a duplicate wallet', async () => {
-    const racing = new WalletsService({
-      findByUserId: async () => [],
-      create: async () => { throw new UniqueViolationError() },
-    } as unknown as WalletsRepository, usersService);
-
-    await expect(racing.create({ userId, currency: 'USD' })).rejects.toThrow(
-      new ConflictException('User already has a USD wallet'),
-    );
   });
 });

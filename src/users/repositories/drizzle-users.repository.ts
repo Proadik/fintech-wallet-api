@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDrizzle } from '@nestjs/drizzle';
 import { eq } from 'drizzle-orm';
-import type { Database } from '../../database/database.module.js';
+import type { DatabaseExecutor } from '../../database/database.module.js';
 import { rethrowUniqueViolation } from '../../database/unique-violation.js';
 import { userSchema } from '../../database/schema/index.js';
 import { NewUser, User } from '../interfaces/user.interface.js';
@@ -11,7 +11,7 @@ type UserRow = typeof userSchema.$inferSelect
 
 @Injectable()
 export class DrizzleUsersRepository extends UsersRepository {
-  constructor (@InjectDrizzle() private readonly db: Database) {
+  constructor (@InjectDrizzle() private readonly db: DatabaseExecutor) {
     super()
   }
 

@@ -1,13 +1,13 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
-import { createApp } from './create-app.js';
+import { createDbApp } from './create-db-app.js';
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
-  beforeEach(async () => {
-    app = await createApp();
+  beforeAll(async () => {
+    ({ app } = await createDbApp());
   });
 
   it('/ (GET)', () => {
@@ -17,7 +17,7 @@ describe('AppController (e2e)', () => {
       .expect('Hello World!');
   });
 
-  afterEach(async () => {
+  afterAll(async () => {
     await app.close();
   });
 });

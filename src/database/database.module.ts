@@ -4,6 +4,12 @@ import { drizzle, NodePgDatabase } from 'drizzle-orm/node-postgres';
 
 export type Database = NodePgDatabase
 
+// What `db.transaction()` passes to its callback
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
+
+// A repository runs its queries on the pool or, inside a TransactionRunner, on a transaction
+export type DatabaseExecutor = Database | Transaction
+
 @Module({
   imports: [
     DrizzleModule.forRootAsync({

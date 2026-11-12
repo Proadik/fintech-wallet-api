@@ -1,25 +1,35 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
-import { createApp } from './create-app.js';
+import type { Database } from '../src/database/database.module.js';
+import { createDbApp } from './create-db-app.js';
+import { createTestData } from './test-data.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MISSING_ID = '00000000-0000-4000-8000-000000000000';
 
+const data = createTestData();
+
 const validUser = {
-  email: 'adil@example.com',
+  email: data.email('adil'),
   firstName: 'Adil',
   lastName: 'Kim',
 };
 
 describe('Users (e2e)', () => {
   let app: INestApplication<App>;
+  let db: Database;
 
-  beforeEach(async () => {
-    app = await createApp();
+  beforeAll(async () => {
+    ({ app, db } = await createDbApp());
   });
 
+  // Every test starts without the users of the previous one
   afterEach(async () => {
+    await data.cleanup(db);
+  });
+
+  afterAll(async () => {
     await app.close();
   });
 
@@ -36,7 +46,7 @@ describe('Users (e2e)', () => {
 
   it('gives two users different UUIDs', async () => {
     const first = await createUser(validUser).expect(201);
-    const second = await createUser({ ...validUser, email: 'other@example.com' }).expect(201);
+    const second = await createUser({ ...validUser, email: data.email('other') }).expect(201);
 
     expect(first.body.id).toMatch(UUID_REGEX);
     expect(second.body.id).toMatch(UUID_REGEX);
@@ -61,7 +71,7 @@ describe('Users (e2e)', () => {
   it('rejects the same email in a different case → 409', async () => {
     await createUser(validUser).expect(201);
 
-    const res = await createUser({ ...validUser, email: 'ADIL@Example.COM' }).expect(409);
+    const res = await createUser({ ...validUser, email: validUser.email.toUpperCase() }).expect(409);
 
     expect(res.body.message).toBe('Email already taken');
   });

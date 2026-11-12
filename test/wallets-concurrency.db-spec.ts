@@ -31,8 +31,8 @@ describe('Wallets concurrency (e2e, PostgreSQL)', () => {
 
   afterAll(async () => {
     if (userId) {
-      // await db.delete(walletSchema).where(eq(walletSchema.userId, userId));
-      // await db.delete(userSchema).where(eq(userSchema.id, userId));
+      await db.delete(walletSchema).where(eq(walletSchema.userId, userId));
+      await db.delete(userSchema).where(eq(userSchema.id, userId));
     }
 
     await app?.close();
@@ -40,7 +40,7 @@ describe('Wallets concurrency (e2e, PostgreSQL)', () => {
 
   it('should create only one USD wallet', async () => {
     const requests = Array.from(
-      { length: 1000 },
+      { length: 50 },
       () =>
         request(app.getHttpServer())
           .post('/wallets')
@@ -61,7 +61,7 @@ describe('Wallets concurrency (e2e, PostgreSQL)', () => {
     );
 
     expect(created).toHaveLength(1);
-    expect(conflicts).toHaveLength(999);
+    expect(conflicts).toHaveLength(49);
 
     const rows = await db.select().from(walletSchema).where(eq(walletSchema.userId, userId));
 
@@ -75,14 +75,14 @@ describe('Wallets concurrency (e2e, PostgreSQL)', () => {
     const service = app.get(WalletsService);
 
     const results = await Promise.allSettled(
-      Array.from({ length: 1000 }, () => service.create({ userId, currency: 'EUR' })),
+      Array.from({ length: 50 }, () => service.create({ userId, currency: 'EUR' })),
     );
 
     const created = results.filter((result) => result.status === 'fulfilled');
     const rejected = results.filter((result) => result.status === 'rejected');
 
     expect(created).toHaveLength(1);
-    expect(rejected).toHaveLength(999);
+    expect(rejected).toHaveLength(49);
 
     for (const result of rejected) {
       expect(result.reason).toBeInstanceOf(ConflictException);

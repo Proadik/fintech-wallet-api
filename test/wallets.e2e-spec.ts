@@ -1,26 +1,38 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
-import { createApp } from './create-app.js';
+import type { Database } from '../src/database/database.module.js';
+import { createDbApp } from './create-db-app.js';
+import { createTestData } from './test-data.js';
 
 const MISSING_ID = '00000000-0000-4000-8000-000000000000';
 
 describe('Wallets (e2e)', () => {
+  const data = createTestData();
+
   let app: INestApplication<App>;
+  let db: Database;
   let userId: string;
 
-  beforeEach(async () => {
-    app = await createApp();
+  beforeAll(async () => {
+    ({ app, db } = await createDbApp());
+  });
 
+  beforeEach(async () => {
     const res = await request(app.getHttpServer())
       .post('/users')
-      .send({ email: 'adil@example.com', firstName: 'Adil', lastName: 'Kim' })
+      .send({ email: data.email('adil'), firstName: 'Adil', lastName: 'Kim' })
       .expect(201);
 
     userId = res.body.id;
   });
 
+  // Every test starts with a new user that has no wallets
   afterEach(async () => {
+    await data.cleanup(db);
+  });
+
+  afterAll(async () => {
     await app.close();
   });
 
