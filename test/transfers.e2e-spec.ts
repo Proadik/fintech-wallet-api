@@ -1,7 +1,13 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
+import { randomUUID } from 'node:crypto';
+import { getDrizzleToken } from '@nestjs/drizzle';
+import { eq } from 'drizzle-orm';
+import type { Database } from '../src/database/database.module.js';
+import { walletSchema } from '../src/database/schema/index.js';
 import { createDbApp } from './create-db-app.js';
+import { createTestData } from './test-data.js';
 
 const KEY = '7b0c1c1e-5a53-4a52-9d0b-6f0e2f4f8a11';
 
@@ -116,6 +122,89 @@ describe('Transfers (e2e)', () => {
       const res = await request(app.getHttpServer()).get('/transfers/abc').expect(400);
 
       expect(res.body.message).toBe('Validation failed (uuid is expected)');
+    });
+  });
+
+  // UUIDs are case-insensitive: the same wallet or key in upper case is still the same one
+  describe('UUIDs in upper case', () => {
+    const data = createTestData();
+
+    let db: Database;
+    let fromWalletId: string;
+    let toWalletId: string;
+
+    const createWallet = async (name: string) => {
+      const user = await request(app.getHttpServer())
+        .post('/users')
+        .send({ email: data.email(name), firstName: 'Upper', lastName: 'Case' })
+        .expect(201);
+
+      const wallet = await request(app.getHttpServer())
+        .post('/wallets')
+        .send({ userId: user.body.id.toUpperCase(), currency: 'KZT' })
+        .expect(201);
+
+      return wallet.body.id as string;
+    };
+
+    const balanceOf = async (id: string) =>
+      (await request(app.getHttpServer()).get(`/wallets/${id}`).expect(200)).body.balance;
+
+    beforeAll(async () => {
+      db = app.get<Database>(getDrizzleToken());
+
+      fromWalletId = await createWallet('sender');
+      toWalletId = await createWallet('receiver');
+
+      // 100.00 KZT to send from
+      await db.update(walletSchema).set({ balanceMinor: 10000n }).where(eq(walletSchema.id, fromWalletId));
+    });
+
+    afterAll(async () => {
+      await data.cleanup(db);
+    });
+
+    it('accepts wallet ids and the key in upper case and answers in the canonical lower case', async () => {
+      const key = randomUUID();
+
+      const res = await createTransfer()
+        .set('Idempotency-Key', key.toUpperCase())
+        .send({
+          fromWalletId: fromWalletId.toUpperCase(),
+          toWalletId: toWalletId.toUpperCase(),
+          amount: '40.00',
+          currency: 'KZT',
+        })
+        .expect(201);
+
+      expect(res.body).toMatchObject({ fromWalletId, toWalletId, amount: '40.00', currency: 'KZT' });
+      expect(await balanceOf(fromWalletId)).toBe('60.00');
+      expect(await balanceOf(toWalletId)).toBe('40.00');
+
+      // The same request in lower case is a repeat of the first one, not a different request
+      const repeat = await createTransfer()
+        .set('Idempotency-Key', key)
+        .send({ fromWalletId, toWalletId, amount: '40.00', currency: 'KZT' })
+        .expect(201);
+
+      expect(repeat.body).toEqual(res.body);
+      expect(await balanceOf(fromWalletId)).toBe('60.00');
+      expect(await balanceOf(toWalletId)).toBe('40.00');
+    });
+
+    it('reads a wallet, its transfers and a transfer by ids in upper case', async () => {
+      const created = await createTransfer()
+        .set('Idempotency-Key', randomUUID())
+        .send({ fromWalletId, toWalletId, amount: '1.00', currency: 'KZT' })
+        .expect(201);
+
+      const wallet = await request(app.getHttpServer()).get(`/wallets/${fromWalletId.toUpperCase()}`).expect(200);
+      const list = await request(app.getHttpServer()).get(`/wallets/${fromWalletId.toUpperCase()}/transfers`).expect(200);
+      const one = await request(app.getHttpServer()).get(`/transfers/${created.body.id.toUpperCase()}`).expect(200);
+
+      expect(wallet.body.id).toBe(fromWalletId);
+      expect(list.body[0]).toEqual(created.body);
+      expect(one.body).toEqual(created.body);
     });
   });
 });

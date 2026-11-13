@@ -1,12 +1,15 @@
 import { IsIn, IsNotEmpty, IsString, IsUUID, Matches } from 'class-validator';
+import { LowercaseUuid } from '../../common/transforms/lowercase-uuid.js';
 
 export class CreateTransferDto {
   @IsNotEmpty()
   @IsUUID()
+  @LowercaseUuid()
   fromWalletId: string;
 
   @IsNotEmpty()
   @IsUUID()
+  @LowercaseUuid()
   toWalletId: string;
 
   @IsString()

@@ -304,6 +304,8 @@ The sender must hold at least `amount`, otherwise the transfer gets `409 Insuffi
 
 Every `:id` must be a UUID; anything else gets `400` with `Validation failed (uuid is expected)`.
 
+UUIDs are case-insensitive. Ids in a request body and the `Idempotency-Key` are brought to lower case as they enter the application, and every response uses lower case, so `A5F3...` and `a5f3...` are the same wallet and the same key.
+
 ## Transfers
 
 `POST /transfers` moves `amount` from one wallet to another. One transfer writes, in a single database transaction:
@@ -373,7 +375,7 @@ $ npm run test:cov
 - **Unit tests** sit next to the code and cover the services' rules with the repositories mocked (`vi.fn()`).
 - **E2e tests** start the whole application and call it over HTTP with `supertest`. They run on a real PostgreSQL with the Drizzle repositories.
 
-- **Database tests** also run on a real PostgreSQL and cover what needs direct access to it: `TransactionRunner` commits and rolls back as a whole, and 50 simultaneous `POST /wallets` for one user and currency must create exactly one wallet and answer `409` to the other 49. For transfers: 100 concurrent transfers from one wallet are each applied once, a wallet with money for 50 of them is never overdrawn, opposite transfers between two wallets do not deadlock, and a reused `Idempotency-Key` does not move money twice. Ledger integrity: writing to the tables directly, past the service, cannot commit a transfer whose ledger entries are missing, unequal or on the wrong wallets.
+- **Database tests** also run on a real PostgreSQL and cover what needs direct access to it: `TransactionRunner` commits and rolls back as a whole, and 50 simultaneous `POST /wallets` for one user and currency must create exactly one wallet and answer `409` to the other 49. For transfers: 100 concurrent transfers from one wallet are each applied once, a wallet with money for 50 of them is never overdrawn, opposite transfers between two wallets do not deadlock, and a reused `Idempotency-Key` does not move money twice. Fault injection: the real `TransfersService` runs on a transaction that fails after each of its statements in turn (key, lock, debit, credit, transfer, each ledger entry, key update); every time balances, transfers, ledger and key are left exactly as before, and the same request can be retried with the same key. Ledger integrity: writing to the tables directly, past the service, cannot commit a transfer whose ledger entries are missing, unequal or on the wrong wallets.
 
 The unit suite needs no database. `npm run test:e2e` and `npm run test:db` create and delete rows, so they run only on a database of their own:
 

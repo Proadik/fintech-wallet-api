@@ -27,6 +27,7 @@ export class TransfersController {
     @Body() dto: CreateTransferDto,
     @Headers('idempotency-key') idempotencyKey: string,
   ) {
-    return this.transfersService.create(dto, idempotencyKey);
+    // The guard has checked that the key is a UUID; like the ids in the body it is used in lower case
+    return this.transfersService.create(dto, idempotencyKey.toLowerCase());
   }
 }
