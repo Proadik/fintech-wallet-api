@@ -1,0 +1,113 @@
+{
+  "type": "diff",
+  "version": "9",
+  "dialect": "postgres",
+  "id": "5f46d2bf-e900-42dc-9a42-c5bf1b2c81b1",
+  "prevIds": [
+    "f45550f7-613c-45c7-80e5-caec41a70198"
+  ],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "ledger_entries",
+        "direction"
+      ],
+      "writes": [
+        "s|col|public.ledger_entries.direction",
+        "n|col|public.ledger_entries.direction",
+        "e|col|public.ledger_entries.direction"
+      ],
+      "reads": [
+        "n|tbl|public.ledger_entries",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_unique",
+      "statementTarget": [
+        "table",
+        "public",
+        "ledger_entries"
+      ],
+      "writes": [
+        "s|uq|public.ledger_entries.ledger_entries_transfer_id_direction_unique",
+        "n|uq|public.ledger_entries.ledger_entries_transfer_id_direction_unique",
+        "e|uq|public.ledger_entries.ledger_entries_transfer_id_direction_unique",
+        "n|con|public.ledger_entries.ledger_entries_transfer_id_direction_unique",
+        "n|rel|public.ledger_entries_transfer_id_direction_unique"
+      ],
+      "reads": [
+        "n|tbl|public.ledger_entries",
+        "n|sch|public",
+        "n|col|public.ledger_entries.transfer_id",
+        "n|col|public.ledger_entries.direction"
+      ]
+    },
+    {
+      "statementType": "add_check",
+      "statementTarget": [
+        "table",
+        "public",
+        "ledger_entries"
+      ],
+      "writes": [
+        "s|ck|public.ledger_entries.ledger_entries_direction_matches_amount",
+        "n|ck|public.ledger_entries.ledger_entries_direction_matches_amount",
+        "e|ck|public.ledger_entries.ledger_entries_direction_matches_amount",
+        "n|con|public.ledger_entries.ledger_entries_direction_matches_amount"
+      ],
+      "reads": [
+        "n|tbl|public.ledger_entries",
+        "n|sch|public",
+        "n|col|public.ledger_entries.direction",
+        "n|col|public.ledger_entries.amount"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "direction",
+        "type": "varchar(6)",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "ledger_entries_transfer_id_direction_unique",
+        "nameExplicit": true,
+        "columns": [
+          "transfer_id",
+          "direction"
+        ],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "ledger_entries",
+        "name": "ledger_entries_direction_matches_amount",
+        "value": "(\"direction\" = 'debit' AND \"amount\" < 0) OR (\"direction\" = 'credit' AND \"amount\" > 0)",
+        "entityType": "checks"
+      }
+    }
+  ]
+}

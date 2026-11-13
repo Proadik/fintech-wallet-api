@@ -6,6 +6,9 @@ import type { DatabaseExecutor } from '../../database/database.module.js';
 import { rethrowUniqueViolation } from '../../database/unique-violation.js';
 import { transferSchema } from '../../database/schema/index.js';
 import { toDecimal, toMinor } from '../../common/money.js';
+import { desc, eq, or } from 'drizzle-orm';
+
+type TransferRow = typeof transferSchema.$inferSelect
 
 @Injectable()
 export class DrizzleTransfersRepository extends TransfersRepository {
@@ -19,8 +22,31 @@ export class DrizzleTransfersRepository extends TransfersRepository {
         .insert(transferSchema)
         .values({ ...data, amount: toMinor(data.amount) })
         .returning(),
-    )
+    );
 
+    return this.toTransfer(row);
+  }
+
+  async findById(id: string) {
+    const [row] = await this.db
+      .select()
+      .from(transferSchema)
+      .where(eq(transferSchema.id, id));
+
+    return row && this.toTransfer(row);
+  }
+
+  async findByWalletId(walletId: string) {
+    const rows = await this.db
+      .select()
+      .from(transferSchema)
+      .where(or(eq(transferSchema.fromWalletId, walletId), eq(transferSchema.toWalletId, walletId)))
+      .orderBy(desc(transferSchema.createdAt));
+
+    return rows.map((row) => this.toTransfer(row));
+  }
+
+  private toTransfer(row: TransferRow): Transfer {
     return {
       id: row.id,
       fromWalletId: row.fromWalletId,

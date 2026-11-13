@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsUUID } from 'class-validator';
+import { IsIn, IsNotEmpty, IsString, IsUUID, Matches } from 'class-validator';
 
 export class CreateTransferDto {
   @IsNotEmpty()
@@ -9,7 +9,9 @@ export class CreateTransferDto {
   @IsUUID()
   toWalletId: string;
 
-  @IsNotEmpty()
+  @IsString()
+  @Matches(/^\d{1,15}(\.\d{1,2})?$/, { message: 'amount must be a positive decimal string with at most two decimal places, e.g. "150.00"', })
+  @Matches(/[1-9]/, { message: 'amount must be greater than zero' })
   amount: string;
 
   @IsNotEmpty()

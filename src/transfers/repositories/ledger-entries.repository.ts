@@ -8,14 +8,15 @@ export class LedgerEntriesRepository {
   constructor(@InjectDrizzle() private readonly db: DatabaseExecutor) {}
 
   async create(data: NewLedgerEntryRecord) {
-    const debit = data.amount.startsWith('-')
-    const minor = toMinor(debit ? data.amount.slice(1) : data.amount)
+    const minor = toMinor(data.amount)
 
     const [row] = await this.db
       .insert(ledgerEntrySchema)
       .values({
         transferId: data.transferId,
-        amount: debit ? -minor : minor,
+        direction: data.direction,
+        // Stored signed, so the two entries of a transfer sum to zero
+        amount: data.direction === 'debit' ? -minor : minor,
         walletId: data.walletId,
       })
       .returning()

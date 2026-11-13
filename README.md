@@ -87,7 +87,8 @@ src/
 │   ├── interfaces/             # Wallet
 │   └── repositories/           # WalletsRepository and its Drizzle implementation
 └── transfers/
-    ├── transfers.controller.ts # POST /transfers
+    ├── transfers.controller.ts # POST /transfers, GET /transfers/:id
+    ├── wallet-transfers.controller.ts   # GET /wallets/:walletId/transfers
     ├── transfers.service.ts    # the transfer operation, inside one transaction
     ├── dto/
     ├── interfaces/             # Transfer, LedgerEntryRecord, IdempotencyRecord
@@ -108,7 +109,7 @@ The abstract class doubles as the dependency-injection token, and each module bi
 
 Swapping the storage means writing a new class that extends the repository and changing that one line; services and controllers stay as they are.
 
-`WalletsModule` imports `UsersModule` and uses `UsersService` to check that the wallet owner exists. `TransfersService` does not inject repositories at all: it gets them from `TransactionRunner`, bound to one database transaction — see [Transactions](#transactions).
+`WalletsModule` imports `UsersModule` and uses `UsersService` to check that the wallet owner exists. `TransfersModule` imports `WalletsModule` the same way, so the dependencies point one way: transfers know about wallets, wallets know nothing about transfers. For the transfer itself `TransfersService` does not use injected repositories: it gets them from `TransactionRunner`, bound to one database transaction — see [Transactions](#transactions).
 
 ## Endpoints
 
@@ -120,7 +121,9 @@ Swapping the storage means writing a new class that extends the repository and c
 | `GET`  | `/users/:id/wallets` | List a user's wallets        | `200`   | `400`, `404`       |
 | `POST` | `/wallets`           | Open a wallet for a user     | `201`   | `400`, `404`, `409` |
 | `GET`  | `/wallets/:id`       | Get one wallet               | `200`   | `400`, `404`       |
-| `POST` | `/transfers`         | Move money between wallets   | `201`   | `400`, `404`, `409`, `422` |
+| `POST` | `/transfers`         | Move money between wallets   | `201`   | `400`, `404`, `409` |
+| `GET`  | `/transfers/:id`     | Get one transfer             | `200`   | `400`, `404`       |
+| `GET`  | `/wallets/:walletId/transfers` | List a wallet's transfers | `200` | `400`, `404`     |
 
 ### Error format
 
@@ -140,10 +143,9 @@ Every error, including validation failures and unknown routes, has the same shap
 
 | Status | When                                                                              |
 | ------ | --------------------------------------------------------------------------------- |
-| `400`  | The body fails validation, `:id` is not a UUID, the `Idempotency-Key` header is missing or not a UUID, or `Currency mismatch` |
-| `404`  | `User not found`, `Wallet not found`, or an unknown route                         |
-| `409`  | `Email already taken`, `User already has a <currency> wallet`, or `Idempotency key already used with different request parameters` |
-| `422`  | `Insufficient funds`                                                              |
+| `400`  | The body fails validation, `:id` is not a UUID, the `Idempotency-Key` header is missing or not a UUID, `Currency mismatch`, or `Cannot transfer to the same wallet` |
+| `404`  | `User not found`, `Wallet not found`, `Transfer not found`, or an unknown route   |
+| `409`  | `Email already taken`, `User already has a <currency> wallet`, `Idempotency key already used with different request parameters`, or `Insufficient funds` |
 | `500`  | Anything unexpected; the response says only `Internal server error`               |
 
 ## Request examples
@@ -209,13 +211,18 @@ curl -X POST http://localhost:3001/transfers \
   -d '{"fromWalletId": "a5f302c5-3bae-428e-a730-84969e52813a", "toWalletId": "b92b280c-3396-49cb-b0cc-9438729b629b", "amount": "150.00", "currency": "KZT"}'
 ```
 
-The first request answers `201` with an empty body. Sending the same request again with the same key answers `201` with the id of the transfer that was already made, and moves nothing:
-
 ```json
 {
-  "transferId": "3f0e7c1a-2b0d-4a53-8d39-0a4f5a3f3c11"
+  "id": "3f0e7c1a-2b0d-4a53-8d39-0a4f5a3f3c11",
+  "fromWalletId": "a5f302c5-3bae-428e-a730-84969e52813a",
+  "toWalletId": "b92b280c-3396-49cb-b0cc-9438729b629b",
+  "amount": "150.00",
+  "currency": "KZT",
+  "createdAt": "2026-11-12T18:42:10.201Z"
 }
 ```
+
+Sending the same request again with the same key answers `201` with that same transfer, and moves nothing.
 
 The same key with a different body is refused:
 
@@ -228,6 +235,14 @@ The same key with a different body is refused:
   "path": "/transfers"
 }
 ```
+
+### List a wallet's transfers
+
+```bash
+curl http://localhost:3001/wallets/a5f302c5-3bae-428e-a730-84969e52813a/transfers
+```
+
+Returns the transfers the wallet sent or received, newest first (`[]` when there are none), or `404` when the wallet does not exist.
 
 ### A failed request
 
@@ -276,11 +291,11 @@ A user can hold one wallet per currency; a second wallet in the same currency ge
 | ----------------- | ---------------------------------------------------------------------------- |
 | `Idempotency-Key` | Required header, a UUID. Checked before the body.                            |
 | `fromWalletId`    | Required, a UUID of an existing wallet (else `404`).                         |
-| `toWalletId`      | Required, a UUID of an existing wallet (else `404`).                         |
-| `amount`          | Required decimal string in the currency's main units: `"150"` or `"150.00"`, at most two decimal places. |
+| `toWalletId`      | Required, a UUID of an existing wallet (else `404`). Must differ from `fromWalletId` (else `400 Cannot transfer to the same wallet`). |
+| `amount`          | Required decimal string in the currency's main units: `"150"` or `"150.00"`. Digits only, at most two decimal places and 15 digits before the point, greater than zero. A JSON number is rejected. |
 | `currency`        | Required, one of `USD`, `EUR`, `KZT`. Must be the currency of both wallets (else `400 Currency mismatch`). |
 
-The sender must hold at least `amount`, otherwise the transfer gets `422 Insufficient funds` and nothing changes.
+The sender must hold at least `amount`, otherwise the transfer gets `409 Insufficient funds` and nothing changes.
 
 ### Path parameters
 
@@ -293,7 +308,7 @@ Every `:id` must be a UUID; anything else gets `400` with `Validation failed (uu
 1. an idempotency record for the request's key;
 2. the new balances of both wallets;
 3. a row in `transfers`;
-4. two ledger entries — `-amount` for the sender's wallet and `+amount` for the receiver's — which always sum to zero.
+4. two ledger entries — a `debit` of `-amount` for the sender's wallet and a `credit` of `+amount` for the receiver's — which always sum to zero.
 
 Money is integer arithmetic. The API takes and returns decimal strings (`"150.00"`); `src/common/money.ts` converts them to `bigint` minor units (`15000`) for every comparison, update and stored value, so nothing is ever rounded.
 
@@ -306,12 +321,12 @@ The service hashes the fields that define the transfer — both wallet ids, the 
 | The key                                  | Result                                                             |
 | ---------------------------------------- | ------------------------------------------------------------------ |
 | is new                                   | The transfer runs; the record is linked to it.                     |
-| exists with the same request hash        | `201` with the earlier `transferId`; no money moves.               |
+| exists with the same request hash        | `201` with the earlier transfer; no money moves.                   |
 | exists with a different request hash     | `409 Idempotency key already used with different request parameters` |
 
 The insert is `INSERT ... ON CONFLICT DO NOTHING`: a taken key yields no row instead of an error, which would abort the transaction. Two simultaneous requests with one key are safe too — the second waits on the unique index until the first commits, then sees its record.
 
-Because the key is stored in the same transaction as the money movement, a transfer that fails (`404`, `400`, `422`) rolls its key back as well, and the client can retry with the same key after fixing the cause.
+Because the key is stored in the same transaction as the money movement, a transfer that fails (`404`, `400`, `409`) rolls its key back as well, and the client can retry with the same key after fixing the cause.
 
 ### Transactions
 
@@ -329,7 +344,7 @@ return this.transactions.run(async ({ wallets, transfers, ledgerEntries, idempot
 
 - **Row locks before the balance check.** The transfer first locks both wallet rows with `SELECT ... FOR UPDATE`, then reads the balance. Concurrent transfers from one wallet therefore run one after another, each seeing the previous result, so the wallet cannot be overdrawn.
 - **Locks are taken in wallet-id order**, whatever the direction of the transfer. Opposite transfers A → B and B → A then wait for each other instead of deadlocking.
-- **The debit repeats the condition**: `UPDATE ... SET balance_minor = balance_minor - $1 WHERE balance_minor >= $1`. If no row is updated the transfer fails with `422`; and `CHECK (balance_minor >= 0)` is the last line of defence.
+- **The debit repeats the condition**: `UPDATE ... SET balance_minor = balance_minor - $1 WHERE balance_minor >= $1`. If no row is updated the transfer fails with `409`; and `CHECK (balance_minor >= 0)` is the last line of defence.
 
 ## Run tests
 
@@ -368,10 +383,10 @@ The application stores data in PostgreSQL. `DatabaseModule` registers the connec
 | `users`   | `id`, `email`, `first_name`, `last_name`, `created_at`   | `email` is unique                                   |
 | `wallets` | `id`, `user_id`, `currency`, `balance_minor`, `created_at` | `user_id` references `users`; `(user_id, currency)` is unique; `balance_minor >= 0`; `currency` is one of `USD`, `EUR`, `KZT` |
 | `transfers` | `id`, `from_wallet_id`, `to_wallet_id`, `amount_minor`, `currency`, `status`, `created_at` | both wallet ids reference `wallets`; `amount_minor > 0`; `from_wallet_id <> to_wallet_id` |
-| `ledger_entries` | `id`, `transfer_id`, `wallet_id`, `amount`, `created_at` | `transfer_id` references `transfers`; `wallet_id` references `wallets` |
+| `ledger_entries` | `id`, `transfer_id`, `wallet_id`, `direction`, `amount`, `created_at` | `transfer_id` references `transfers`; `wallet_id` references `wallets`; `(transfer_id, direction)` is unique; a `debit` has `amount < 0` and a `credit` has `amount > 0` |
 | `idempotency_records` | `id`, `key`, `request_hash`, `transfer_id`, `created_at` | `key` is unique; `transfer_id` references `transfers` |
 
-`balance_minor`, `amount_minor` and the ledger `amount` are `bigint` values in minor units (cents, tiyn). The API still works with decimal strings: `12345` is sent as `"123.45"`. A ledger `amount` is signed: negative for the wallet that paid, positive for the one that received.
+`balance_minor`, `amount_minor` and the ledger `amount` are `bigint` values in minor units (cents, tiyn). The API still works with decimal strings: `12345` is sent as `"123.45"`. A ledger `amount` is signed: negative for the wallet that paid, positive for the one that received. The `direction` constraints mean a transfer can have at most one debit and one credit, never a third entry or two of the same sign. That it has *both*, and that they sum to zero, is ensured by the service writing them in one transaction, not by the database.
 
 No foreign key cascades: a user with wallets, or a wallet with transfers, cannot be deleted.
 
@@ -380,10 +395,8 @@ The services check for a duplicate before inserting, but two simultaneous reques
 Known limitations:
 
 - **No pagination.** `GET /users` returns every user in one response.
-- **No update or delete endpoints**, and no endpoints to read transfers or a wallet's ledger.
+- **No update or delete endpoints**, and no endpoint to read a wallet's ledger.
 - **No way to fund a wallet through the API.** Wallets start at `0.00`; money only moves between wallets.
-- **`amount` is not validated in the DTO.** A malformed, negative or zero amount, and a transfer from a wallet to itself, are stopped by the money parser or by the database constraints, but the client gets `500` instead of `400`.
-- **The first response to a transfer has an empty body**, while a repeat returns `{ "transferId": ... }`.
 - **Idempotency keys are global and never expire.** There is no authentication, so keys are not scoped to a user.
 
 ## Deployment

@@ -112,7 +112,7 @@ describe('Transfers concurrency (PostgreSQL)', () => {
       Array.from({ length: 100 }, () => transfer(from, to, '10.00')),
     );
 
-    expect(statusesOf(responses)).toEqual({ 201: 50, 422: 50 });
+    expect(statusesOf(responses)).toEqual({ 201: 50, 409: 50 });
     expect(await balanceOf(from)).toBe(0n);
     expect(await balanceOf(to)).toBe(50000n);
 

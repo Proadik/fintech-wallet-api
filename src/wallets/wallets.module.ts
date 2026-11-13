@@ -13,5 +13,6 @@ import { DrizzleWalletsRepository } from './repositories/drizzle-wallets.reposit
     WalletsService,
     { provide: WalletsRepository, useClass: DrizzleWalletsRepository },
   ],
+  exports: [WalletsService],
 })
 export class WalletsModule {}

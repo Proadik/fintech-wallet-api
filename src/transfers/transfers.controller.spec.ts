@@ -3,6 +3,7 @@ import { TransfersController } from './transfers.controller.js';
 import { TransfersService } from './transfers.service.js';
 import { TransfersRepository } from './repositories/transfers.repository.js';
 import { TransactionRunner } from '../common/transactions/transaction-runner.js';
+import { WalletsService } from '../wallets/wallets.service.js';
 
 describe('TransfersController', () => {
   let controller: TransfersController;
@@ -14,6 +15,7 @@ describe('TransfersController', () => {
         TransfersService,
         { provide: TransfersRepository, useValue: { create: vi.fn() } },
         { provide: TransactionRunner, useValue: { run: vi.fn() } },
+        { provide: WalletsService, useValue: { getOne: vi.fn() } },
       ],
     }).compile();
 
