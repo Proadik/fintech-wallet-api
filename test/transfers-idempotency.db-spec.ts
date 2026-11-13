@@ -5,7 +5,6 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import type { Database } from '../src/database/database.module.js';
 import {
-  idempotencyRecordsSchema,
   ledgerEntrySchema,
   transferSchema,
   walletSchema,
@@ -16,7 +15,6 @@ import { createTestData } from './test-data.js';
 
 describe('Transfers idempotency (PostgreSQL)', () => {
   const data = createTestData();
-  const keys: string[] = [];
 
   let app: INestApplication<App>;
   let db: Database;
@@ -38,9 +36,7 @@ describe('Transfers idempotency (PostgreSQL)', () => {
   };
 
   const newKey = () => {
-    const key = randomUUID();
-    keys.push(key);
-    return key;
+    return randomUUID();
   };
 
   const transfer = (key: string, amount: string) =>
@@ -63,11 +59,6 @@ describe('Transfers idempotency (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    const wallets = [fromWalletId, toWalletId];
-
-    await db.delete(idempotencyRecordsSchema).where(inArray(idempotencyRecordsSchema.key, keys));
-    await db.delete(ledgerEntrySchema).where(inArray(ledgerEntrySchema.walletId, wallets));
-    await db.delete(transferSchema).where(inArray(transferSchema.fromWalletId, wallets));
     await data.cleanup(db);
     await app.close();
   });

@@ -6,6 +6,7 @@ export default defineConfig({
   test: {
     globals: true,
     root: './',
+    globalSetup: './test/global-setup.ts',
     include: ['**/*.db-spec.ts'],
   },
 });

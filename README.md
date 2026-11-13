@@ -40,6 +40,9 @@ $ npm run db:generate
 
 # apply them to the database in DATABASE_URL
 $ npm run db:migrate
+
+# apply them to the test database in TEST_DATABASE_URL
+$ npm run db:migrate:test
 ```
 
 ## Compile and run the project
@@ -370,9 +373,21 @@ $ npm run test:cov
 - **Unit tests** sit next to the code and cover the services' rules with the repositories mocked (`vi.fn()`).
 - **E2e tests** start the whole application and call it over HTTP with `supertest`. They run on a real PostgreSQL with the Drizzle repositories.
 
-- **Database tests** also run on a real PostgreSQL and cover what needs direct access to it: `TransactionRunner` commits and rolls back as a whole, and 50 simultaneous `POST /wallets` for one user and currency must create exactly one wallet and answer `409` to the other 49. For transfers: 100 concurrent transfers from one wallet are each applied once, a wallet with money for 50 of them is never overdrawn, opposite transfers between two wallets do not deadlock, and a reused `Idempotency-Key` does not move money twice.
+- **Database tests** also run on a real PostgreSQL and cover what needs direct access to it: `TransactionRunner` commits and rolls back as a whole, and 50 simultaneous `POST /wallets` for one user and currency must create exactly one wallet and answer `409` to the other 49. For transfers: 100 concurrent transfers from one wallet are each applied once, a wallet with money for 50 of them is never overdrawn, opposite transfers between two wallets do not deadlock, and a reused `Idempotency-Key` does not move money twice. Ledger integrity: writing to the tables directly, past the service, cannot commit a transfer whose ledger entries are missing, unequal or on the wrong wallets.
 
-The unit suite needs no database. `npm run test:e2e` and `npm run test:db` connect to `TEST_DATABASE_URL`, or to `DATABASE_URL` from `.env` when that is not set, and expect the migrations to be applied. Each spec file creates its own users and deletes them, with their wallets, afterwards; rows it did not create are left alone.
+The unit suite needs no database. `npm run test:e2e` and `npm run test:db` create and delete rows, so they run only on a database of their own:
+
+```bash
+# once: create an empty database, put its URL into .env as TEST_DATABASE_URL, then create the tables
+$ createdb fintech_wallet_test
+$ npm run db:migrate:test
+```
+
+- **`TEST_DATABASE_URL` is required.** Without it both suites stop before the first test; there is no fallback to `DATABASE_URL`.
+- **It must not be the main database.** If it points at the same server, port and database name as `DATABASE_URL`, the suites refuse to start, whatever the credentials or `localhost` / `127.0.0.1` spelling.
+- **Run `npm run db:migrate:test` again after every new migration**, or the tests will run against outdated tables.
+
+Each spec file still creates its own users and deletes them, with their wallets, afterwards.
 
 ## Storage
 
@@ -386,7 +401,9 @@ The application stores data in PostgreSQL. `DatabaseModule` registers the connec
 | `ledger_entries` | `id`, `transfer_id`, `wallet_id`, `direction`, `amount`, `created_at` | `transfer_id` references `transfers`; `wallet_id` references `wallets`; `(transfer_id, direction)` is unique; a `debit` has `amount < 0` and a `credit` has `amount > 0` |
 | `idempotency_records` | `id`, `key`, `request_hash`, `transfer_id`, `created_at` | `key` is unique; `transfer_id` references `transfers` |
 
-`balance_minor`, `amount_minor` and the ledger `amount` are `bigint` values in minor units (cents, tiyn). The API still works with decimal strings: `12345` is sent as `"123.45"`. A ledger `amount` is signed: negative for the wallet that paid, positive for the one that received. The `direction` constraints mean a transfer can have at most one debit and one credit, never a third entry or two of the same sign. That it has *both*, and that they sum to zero, is ensured by the service writing them in one transaction, not by the database.
+`balance_minor`, `amount_minor` and the ledger `amount` are `bigint` values in minor units (cents, tiyn). The API still works with decimal strings: `12345` is sent as `"123.45"`. A ledger `amount` is signed: negative for the wallet that paid, positive for the one that received. The `direction` constraints mean a transfer can have at most one debit and one credit, never a third entry or two of the same sign.
+
+Two deferred constraint triggers (`ledger_entries_match_transfer`, `transfers_match_ledger_entries`) check the rest at `COMMIT`, for every transfer the transaction touched. A transfer must then have exactly two entries: a debit of `-amount_minor` on `from_wallet_id` and a credit of `+amount_minor` on `to_wallet_id`. So the database itself refuses a transfer without entries or with one entry, entries whose amounts differ from the transfer or from each other, entries on other wallets, and a later change or deletion of an entry. The check is deferred because the rows are written one at a time and agree only when the transaction is complete. Triggers are not part of the Drizzle schema: they live in a hand-written migration (`drizzle/*_ledger_matches_transfer`).
 
 No foreign key cascades: a user with wallets, or a wallet with transfers, cannot be deleted.
 

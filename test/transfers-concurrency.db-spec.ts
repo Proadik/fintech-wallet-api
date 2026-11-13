@@ -5,7 +5,6 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import type { Database } from '../src/database/database.module.js';
 import {
-  idempotencyRecordsSchema,
   ledgerEntrySchema,
   transferSchema,
   walletSchema,
@@ -15,8 +14,6 @@ import { createTestData } from './test-data.js';
 
 describe('Transfers concurrency (PostgreSQL)', () => {
   const data = createTestData();
-  const keys: string[] = [];
-  const walletIds: string[] = [];
 
   let app: INestApplication<App>;
   let db: Database;
@@ -35,7 +32,6 @@ describe('Transfers concurrency (PostgreSQL)', () => {
 
     const id: string = wallet.body.id;
 
-    walletIds.push(id);
     await db.update(walletSchema).set({ balanceMinor }).where(eq(walletSchema.id, id));
 
     return id;
@@ -43,12 +39,9 @@ describe('Transfers concurrency (PostgreSQL)', () => {
 
   // Every call is a separate transfer with a key of its own
   const transfer = (fromWalletId: string, toWalletId: string, amount: string) => {
-    const key = randomUUID();
-    keys.push(key);
-
     return request(app.getHttpServer())
       .post('/transfers')
-      .set('Idempotency-Key', key)
+      .set('Idempotency-Key', randomUUID())
       .send({ fromWalletId, toWalletId, amount, currency: 'KZT' });
   };
 
@@ -71,15 +64,6 @@ describe('Transfers concurrency (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    if (keys.length) {
-      await db.delete(idempotencyRecordsSchema).where(inArray(idempotencyRecordsSchema.key, keys));
-    }
-
-    if (walletIds.length) {
-      await db.delete(ledgerEntrySchema).where(inArray(ledgerEntrySchema.walletId, walletIds));
-      await db.delete(transferSchema).where(inArray(transferSchema.fromWalletId, walletIds));
-    }
-
     await data.cleanup(db);
     await app.close();
   });

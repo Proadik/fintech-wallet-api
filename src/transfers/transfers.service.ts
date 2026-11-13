@@ -27,11 +27,12 @@ export class TransfersService {
     return this.transactions.run(
       async ({ transfers, wallets, idempotency, ledgerEntries }) => {
         const canonical = [
-          dto.fromWalletId,
-          dto.toWalletId,
+          dto.fromWalletId.toLowerCase(),
+          dto.toWalletId.toLowerCase(),
           toMinor(dto.amount),
           dto.currency,
         ].join('|');
+
         const canonicalHash = createHash('sha256')
           .update(canonical)
           .digest('hex');
